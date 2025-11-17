@@ -55,6 +55,10 @@ def analyze_source_impact(db, symbol: str, days: int = 30):
     # Normalize column names (database uses lowercase)
     stock_df.columns = stock_df.columns.str.capitalize()
 
+    # Calculate derived metrics (these aren't stored in database)
+    stock_df['Daily_Return'] = stock_df['Close'].pct_change() * 100  # Convert to percentage
+    stock_df['Volume_Change'] = stock_df['Volume'].pct_change()
+
     # Convert to DataFrame
     df_articles = pd.DataFrame(articles)
     df_articles['publish_date'] = pd.to_datetime(df_articles['publish_date'])
