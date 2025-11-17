@@ -11,14 +11,20 @@ numpy>=1.24.0
 yfinance>=0.2.32
 alpha-vantage>=2.3.1
 
-# AI/ML for sentiment analysis
-transformers>=4.35.0
-torch>=2.1.0
-openai>=1.3.0  # Optional: for GPT-based analysis
-
-# NLP
-spacy>=3.7.0
+# Sentiment Analysis Options:
+# Option 1: TextBlob (lightweight, no API needed, runs locally but simple)
 textblob>=0.17.1
+
+# Option 2: OpenAI API (best quality, requires API key and costs money)
+openai>=1.3.0
+
+# Option 3: Local ML models (OPTIONAL - only if you want FinBERT local model)
+# Uncomment these lines if you want to run FinBERT locally:
+# transformers>=4.35.0
+# torch>=2.1.0
+
+# Entity extraction (optional but recommended)
+spacy>=3.7.0
 
 # Data storage
 sqlalchemy>=2.0.0

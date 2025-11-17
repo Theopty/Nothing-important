@@ -49,7 +49,7 @@ stocks:
 ai_analysis:
   # Sentiment Analysis
   sentiment:
-    model: "finbert"  # Options: finbert, textblob, openai
+    model: "textblob"  # Options: textblob (free, simple), openai (API, $$), finbert (local ML model)
     threshold_positive: 0.6
     threshold_negative: -0.6
 
