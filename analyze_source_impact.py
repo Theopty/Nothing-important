@@ -84,11 +84,11 @@ def analyze_source_impact(db, symbol: str, days: int = 30):
         }).reset_index()
 
         daily_source.columns = ['date', 'avg_sentiment', 'avg_score', 'article_count']
-        daily_source['date'] = pd.to_datetime(daily_source['date'])
+        daily_source['date'] = pd.to_datetime(daily_source['date']).dt.tz_localize(None)
         daily_source.set_index('date', inplace=True)
 
-        # Merge with stock data
-        stock_df.index = pd.to_datetime(stock_df.index)
+        # Merge with stock data - ensure timezone compatibility
+        stock_df.index = pd.to_datetime(stock_df.index).tz_localize(None)
         merged = daily_source.join(stock_df[['Close', 'Daily_Return', 'Volume']], how='inner')
 
         if len(merged) < 3:
