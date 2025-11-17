@@ -28,7 +28,7 @@ def analyze_source_impact(db, symbol: str, days: int = 30):
     print(f"SOURCE IMPACT ANALYSIS FOR {symbol}")
     print(f"{'='*80}\n")
 
-    end_date = datetime.utcnow()
+    end_date = datetime.now()
     start_date = end_date - timedelta(days=days)
 
     # Get articles
@@ -51,6 +51,9 @@ def analyze_source_impact(db, symbol: str, days: int = 30):
     if stock_df.empty:
         print(f"No stock data for {symbol}")
         return
+
+    # Normalize column names (database uses lowercase)
+    stock_df.columns = stock_df.columns.str.capitalize()
 
     # Convert to DataFrame
     df_articles = pd.DataFrame(articles)
@@ -286,7 +289,7 @@ def compare_sources_head_to_head(db, symbol: str, source1: str, source2: str, da
     print(f"HEAD-TO-HEAD: {source1} vs {source2}")
     print(f"{'='*80}\n")
 
-    end_date = datetime.utcnow()
+    end_date = datetime.now()
     start_date = end_date - timedelta(days=days)
 
     articles = db.get_articles_by_date(
