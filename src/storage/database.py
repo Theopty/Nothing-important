@@ -7,6 +7,7 @@ import json
 import logging
 from datetime import datetime
 from typing import List, Dict, Optional
+from pathlib import Path
 import pandas as pd
 
 logging.basicConfig(level=logging.INFO)
@@ -24,6 +25,11 @@ class NewsStockDatabase:
             db_path: Path to SQLite database file
         """
         self.db_path = db_path
+
+        # Create directory if it doesn't exist
+        db_dir = Path(db_path).parent
+        db_dir.mkdir(parents=True, exist_ok=True)
+
         self.conn = None
         self._connect()
         self._create_tables()
