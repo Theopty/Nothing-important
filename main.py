@@ -9,6 +9,7 @@ import yaml
 import logging
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Dict, List
 
 from src.collectors.news_collector import NewsCollector
 from src.collectors.stock_collector import StockCollector
