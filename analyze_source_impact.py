@@ -129,6 +129,19 @@ def analyze_source_impact(db, symbol: str, days: int = 30):
         })
 
     # Create DataFrame and sort by predictive power
+    if not source_impacts:
+        print("\n⚠️  No sources have enough data for impact analysis.")
+        print(f"\nCurrent data:")
+        print(f"  • Total articles: {len(df_articles)}")
+        print(f"  • Unique sources: {len(sources)}")
+        print(f"  • Stock data days: {len(stock_df)}")
+        print(f"\nEach source needs at least 3 days with news + matching stock data.")
+        print(f"\nTo get meaningful results:")
+        print(f"  1. Run more analysis: python main.py --symbols AAPL --days 30")
+        print(f"  2. Use a real news API (NewsData.io) instead of sample data")
+        print(f"  3. Analyze over a longer period with more articles")
+        return
+
     impact_df = pd.DataFrame(source_impacts)
     impact_df = impact_df.sort_values('predictive_corr', key=abs, ascending=False)
 
