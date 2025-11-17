@@ -22,7 +22,7 @@ textblob>=0.17.1
 
 # Data storage
 sqlalchemy>=2.0.0
-sqlite3-python>=1.0.0  # Built-in, but listed for reference
+# Note: sqlite3 is built into Python's standard library
 
 # Visualization
 matplotlib>=3.8.0
