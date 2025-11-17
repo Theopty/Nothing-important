@@ -3,8 +3,7 @@
 
 # News Collection Settings
 news:
-  sources:
-    - worldnewsapi
+  source: newsdata  # Options: 'newsdata' (recommended), 'worldnews'
   categories:
     - business
     - technology

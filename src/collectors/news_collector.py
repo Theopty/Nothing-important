@@ -17,12 +17,27 @@ logger = logging.getLogger(__name__)
 class NewsCollector:
     """Collects news articles from various sources"""
 
-    def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or os.getenv('WORLDNEWS_API_KEY')
-        self.base_url = "https://api.worldnewsapi.com/search-news"
+    def __init__(self, api_key: Optional[str] = None, source: str = 'newsdata'):
+        """
+        Initialize news collector
+
+        Args:
+            api_key: API key (if not provided, will check env vars)
+            source: 'newsdata' or 'worldnews'
+        """
+        self.source = source
+
+        if source == 'newsdata':
+            self.api_key = api_key or os.getenv('NEWSDATA_API_KEY')
+            self.base_url = "https://newsdata.io/api/1/news"
+        elif source == 'worldnews':
+            self.api_key = api_key or os.getenv('WORLDNEWS_API_KEY')
+            self.base_url = "https://api.worldnewsapi.com/search-news"
+        else:
+            raise ValueError(f"Unknown source: {source}. Use 'newsdata' or 'worldnews'")
 
         if not self.api_key:
-            logger.warning("WorldNewsAPI key not found. Set WORLDNEWS_API_KEY in .env file")
+            logger.warning(f"{source} API key not found. Using sample data for testing")
 
     def fetch_news(
         self,
@@ -49,6 +64,97 @@ class NewsCollector:
             logger.error("Cannot fetch news without API key")
             return self._generate_sample_news(start_date, end_date)
 
+        if self.source == 'newsdata':
+            return self._fetch_from_newsdata(start_date, end_date, categories, language, max_results)
+        elif self.source == 'worldnews':
+            return self._fetch_from_worldnews(start_date, end_date, categories, language, max_results)
+        else:
+            return self._generate_sample_news(start_date, end_date)
+
+    def _fetch_from_newsdata(
+        self,
+        start_date: datetime,
+        end_date: datetime,
+        categories: List[str],
+        language: str,
+        max_results: int
+    ) -> List[Dict]:
+        """Fetch news from newsdata.io"""
+        articles = []
+
+        # NewsData.io parameters
+        params = {
+            'apikey': self.api_key,
+            'language': language,
+            'size': min(max_results, 50)  # newsdata.io max is 50 per request
+        }
+
+        # Add categories if specified
+        if categories:
+            # Map common categories to newsdata.io categories
+            category_map = {
+                'business': 'business',
+                'technology': 'technology',
+                'tech': 'technology',
+                'politics': 'politics',
+                'economy': 'business',
+                'finance': 'business',
+                'healthcare': 'health',
+                'health': 'health'
+            }
+            mapped_categories = [category_map.get(c.lower(), c) for c in categories]
+            params['category'] = ','.join(set(mapped_categories))
+
+        try:
+            response = requests.get(self.base_url, params=params, timeout=30)
+            response.raise_for_status()
+
+            data = response.json()
+
+            if data.get('status') == 'success' and 'results' in data:
+                for article in data['results']:
+                    # Filter by date range (newsdata.io doesn't have date params in free tier)
+                    pub_date_str = article.get('pubDate')
+                    if pub_date_str:
+                        try:
+                            pub_date = datetime.fromisoformat(pub_date_str.replace('Z', '+00:00'))
+                            if not (start_date <= pub_date <= end_date):
+                                continue
+                        except:
+                            pass
+
+                    articles.append({
+                        'id': article.get('article_id'),
+                        'title': article.get('title'),
+                        'text': article.get('content', '') or article.get('description', ''),
+                        'summary': article.get('description', ''),
+                        'url': article.get('link'),
+                        'image': article.get('image_url'),
+                        'publish_date': article.get('pubDate'),
+                        'author': ', '.join(article.get('creator', [])) if article.get('creator') else None,
+                        'source': article.get('source_id', 'unknown'),
+                        'category': ','.join(article.get('category', [])) if article.get('category') else 'general',
+                        'fetched_at': datetime.utcnow().isoformat()
+                    })
+
+            logger.info(f"Fetched {len(articles)} articles from newsdata.io")
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error fetching news from newsdata.io: {e}")
+            # Return sample data if API fails
+            return self._generate_sample_news(start_date, end_date)
+
+        return articles
+
+    def _fetch_from_worldnews(
+        self,
+        start_date: datetime,
+        end_date: datetime,
+        categories: List[str],
+        language: str,
+        max_results: int
+    ) -> List[Dict]:
+        """Fetch news from WorldNewsAPI"""
         articles = []
 
         # WorldNewsAPI parameters
@@ -93,7 +199,7 @@ class NewsCollector:
             logger.info(f"Fetched {len(articles)} articles from WorldNewsAPI")
 
         except requests.exceptions.RequestException as e:
-            logger.error(f"Error fetching news: {e}")
+            logger.error(f"Error fetching news from WorldNewsAPI: {e}")
             # Return sample data if API fails
             return self._generate_sample_news(start_date, end_date)
 

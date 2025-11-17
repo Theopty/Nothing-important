@@ -36,7 +36,8 @@ class NewsStockAnalyzer:
             self.config = yaml.safe_load(f)
 
         # Initialize components
-        self.news_collector = NewsCollector()
+        news_source = self.config.get('news', {}).get('source', 'newsdata')
+        self.news_collector = NewsCollector(source=news_source)
         self.stock_collector = StockCollector()
         self.sentiment_analyzer = SentimentAnalyzer(
             method=self.config['ai_analysis']['sentiment']['model']

@@ -4,7 +4,7 @@ A flexible, AI-powered algorithm that correlates news sentiment with stock marke
 
 ## Features
 
-- **Multi-Source News Collection**: Fetch news from WorldNewsAPI with fallback sample data
+- **Multi-Source News Collection**: Fetch news from NewsData.io (recommended) or WorldNewsAPI with fallback sample data
 - **Stock Market Data**: Real-time stock data from yfinance covering indices, sectors, and individual stocks
 - **AI-Powered Analysis**:
   - Sentiment analysis (TextBlob, FinBERT, or OpenAI)
@@ -47,13 +47,14 @@ cp .env.example .env
 
 Edit `.env` and add your API keys:
 ```env
-WORLDNEWS_API_KEY=your_key_here
+NEWSDATA_API_KEY=your_key_here
 OPENAI_API_KEY=your_key_here  # Optional
 ```
 
 Get API keys:
-- **WorldNewsAPI**: https://worldnewsapi.com/ (Free tier available)
-- **OpenAI**: https://platform.openai.com/ (Optional, for enhanced analysis)
+- **NewsData.io**: https://newsdata.io/ (FREE - 200 requests/day) ⭐ **RECOMMENDED**
+- **WorldNewsAPI**: https://worldnewsapi.com/ (Alternative - 100 requests/day free tier)
+- **OpenAI**: https://platform.openai.com/ (Optional, for enhanced sentiment analysis)
 
 ### 3. Run Your First Analysis
 
