@@ -10,9 +10,28 @@ from datetime import datetime
 from typing import Dict, List
 from pathlib import Path
 
-# Set style
+# Set dark style with better colors
 sns.set_style("darkgrid")
+plt.style.use('dark_background')
 plt.rcParams['figure.figsize'] = (12, 6)
+plt.rcParams['figure.facecolor'] = '#1a1a1a'
+plt.rcParams['axes.facecolor'] = '#2d2d2d'
+plt.rcParams['axes.edgecolor'] = '#555555'
+plt.rcParams['grid.color'] = '#3d3d3d'
+plt.rcParams['text.color'] = '#e0e0e0'
+plt.rcParams['axes.labelcolor'] = '#e0e0e0'
+plt.rcParams['xtick.color'] = '#e0e0e0'
+plt.rcParams['ytick.color'] = '#e0e0e0'
+
+# Color palette - darker, more vibrant colors
+COLORS = {
+    'positive': '#00ff88',  # Bright green
+    'negative': '#ff3366',  # Bright red
+    'neutral': '#888888',   # Gray
+    'primary': '#00bfff',   # Bright blue
+    'secondary': '#ff6b35', # Orange
+    'accent': '#9d4edd'     # Purple
+}
 
 
 class Visualizer:
@@ -42,25 +61,25 @@ class Visualizer:
 
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10))
 
-        # Sentiment timeline
-        ax1.plot(df['date'], df['average_sentiment'], 'b-', linewidth=2, label='Avg Sentiment')
+        # Sentiment timeline - darker colors
+        ax1.plot(df['date'], df['average_sentiment'], color=COLORS['primary'], linewidth=3, label='Avg Sentiment', marker='o', markersize=6)
         ax1.fill_between(df['date'],
                          df['average_sentiment'] - df['sentiment_std'],
                          df['average_sentiment'] + df['sentiment_std'],
-                         alpha=0.3)
-        ax1.axhline(y=0, color='gray', linestyle='--', alpha=0.5)
-        ax1.set_xlabel('Date')
-        ax1.set_ylabel('Sentiment Score')
-        ax1.set_title(f'{symbol} - News Sentiment Timeline')
-        ax1.legend()
-        ax1.grid(True, alpha=0.3)
+                         alpha=0.4, color=COLORS['primary'])
+        ax1.axhline(y=0, color=COLORS['neutral'], linestyle='--', alpha=0.7, linewidth=2)
+        ax1.set_xlabel('Date', fontsize=12, fontweight='bold')
+        ax1.set_ylabel('Sentiment Score', fontsize=12, fontweight='bold')
+        ax1.set_title(f'{symbol} - News Sentiment Timeline', fontsize=14, fontweight='bold', color='#ffffff')
+        ax1.legend(fontsize=11, loc='best', framealpha=0.9)
+        ax1.grid(True, alpha=0.3, linestyle=':', linewidth=0.5)
 
-        # Article count
-        ax2.bar(df['date'], df['article_count'], color='steelblue', alpha=0.7)
-        ax2.set_xlabel('Date')
-        ax2.set_ylabel('Number of Articles')
-        ax2.set_title(f'{symbol} - Daily Article Volume')
-        ax2.grid(True, alpha=0.3)
+        # Article count - darker colors
+        ax2.bar(df['date'], df['article_count'], color=COLORS['secondary'], alpha=0.8, edgecolor='white', linewidth=1.5)
+        ax2.set_xlabel('Date', fontsize=12, fontweight='bold')
+        ax2.set_ylabel('Number of Articles', fontsize=12, fontweight='bold')
+        ax2.set_title(f'{symbol} - Daily Article Volume', fontsize=14, fontweight='bold', color='#ffffff')
+        ax2.grid(True, alpha=0.3, linestyle=':', linewidth=0.5)
 
         plt.tight_layout()
 
@@ -101,22 +120,22 @@ class Visualizer:
 
         fig, axes = plt.subplots(3, 1, figsize=(14, 12))
 
-        # 1. Sentiment vs Price
+        # 1. Sentiment vs Price - darker colors
         ax1 = axes[0]
         ax1_twin = ax1.twinx()
 
         ax1.plot(df_merged.index, df_merged['average_sentiment'],
-                'b-', linewidth=2, label='Sentiment')
+                color=COLORS['primary'], linewidth=3, label='Sentiment', marker='o', markersize=5)
         ax1_twin.plot(df_merged.index, df_merged['Close'],
-                     'r-', linewidth=2, label='Stock Price')
+                     color=COLORS['negative'], linewidth=3, label='Stock Price', marker='s', markersize=5)
 
-        ax1.set_xlabel('Date')
-        ax1.set_ylabel('Sentiment Score', color='b')
-        ax1_twin.set_ylabel('Stock Price ($)', color='r')
-        ax1.set_title(f'{symbol} - Sentiment vs Stock Price')
-        ax1.tick_params(axis='y', labelcolor='b')
-        ax1_twin.tick_params(axis='y', labelcolor='r')
-        ax1.grid(True, alpha=0.3)
+        ax1.set_xlabel('Date', fontsize=12, fontweight='bold')
+        ax1.set_ylabel('Sentiment Score', color=COLORS['primary'], fontsize=12, fontweight='bold')
+        ax1_twin.set_ylabel('Stock Price ($)', color=COLORS['negative'], fontsize=12, fontweight='bold')
+        ax1.set_title(f'{symbol} - Sentiment vs Stock Price', fontsize=14, fontweight='bold', color='#ffffff')
+        ax1.tick_params(axis='y', labelcolor=COLORS['primary'], labelsize=10)
+        ax1_twin.tick_params(axis='y', labelcolor=COLORS['negative'], labelsize=10)
+        ax1.grid(True, alpha=0.3, linestyle=':', linewidth=0.5)
 
         # Add correlation text
         corr = df_merged['average_sentiment'].corr(df_merged['Daily_Return'])
@@ -124,41 +143,41 @@ class Visualizer:
                 transform=ax1.transAxes, verticalalignment='top',
                 bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
 
-        # 2. Sentiment vs Daily Returns
+        # 2. Sentiment vs Daily Returns - darker colors
         ax2 = axes[1]
         ax2.scatter(df_merged['average_sentiment'], df_merged['Daily_Return'],
-                   alpha=0.6, s=50)
-        ax2.set_xlabel('Sentiment Score')
-        ax2.set_ylabel('Daily Return (%)')
-        ax2.set_title(f'{symbol} - Sentiment vs Daily Returns Scatter')
-        ax2.axhline(y=0, color='gray', linestyle='--', alpha=0.5)
-        ax2.axvline(x=0, color='gray', linestyle='--', alpha=0.5)
-        ax2.grid(True, alpha=0.3)
+                   alpha=0.7, s=100, color=COLORS['accent'], edgecolors='white', linewidth=1.5)
+        ax2.set_xlabel('Sentiment Score', fontsize=12, fontweight='bold')
+        ax2.set_ylabel('Daily Return (%)', fontsize=12, fontweight='bold')
+        ax2.set_title(f'{symbol} - Sentiment vs Daily Returns Scatter', fontsize=14, fontweight='bold', color='#ffffff')
+        ax2.axhline(y=0, color=COLORS['neutral'], linestyle='--', alpha=0.7, linewidth=2)
+        ax2.axvline(x=0, color=COLORS['neutral'], linestyle='--', alpha=0.7, linewidth=2)
+        ax2.grid(True, alpha=0.3, linestyle=':', linewidth=0.5)
 
-        # Add trend line
+        # Add trend line - brighter color
         z = np.polyfit(df_merged['average_sentiment'].dropna(),
                       df_merged['Daily_Return'].dropna(), 1)
         p = np.poly1d(z)
         x_line = np.linspace(df_merged['average_sentiment'].min(),
                             df_merged['average_sentiment'].max(), 100)
-        ax2.plot(x_line, p(x_line), "r--", alpha=0.8, linewidth=2)
+        ax2.plot(x_line, p(x_line), color=COLORS['positive'], linestyle='--', alpha=0.9, linewidth=3)
 
-        # 3. Volume analysis
+        # 3. Volume analysis - darker colors
         ax3 = axes[2]
         ax3_twin = ax3.twinx()
 
         ax3.bar(df_merged.index, df_merged['article_count'],
-               color='steelblue', alpha=0.6, label='Article Count')
+               color=COLORS['secondary'], alpha=0.8, edgecolor='white', linewidth=1.5, label='Article Count')
         ax3_twin.plot(df_merged.index, df_merged['Volume'] / 1e6,
-                     'g-', linewidth=2, label='Trading Volume (M)')
+                     color=COLORS['positive'], linewidth=3, marker='o', markersize=5, label='Trading Volume (M)')
 
-        ax3.set_xlabel('Date')
-        ax3.set_ylabel('Article Count', color='steelblue')
-        ax3_twin.set_ylabel('Trading Volume (M)', color='g')
-        ax3.set_title(f'{symbol} - News Volume vs Trading Volume')
-        ax3.tick_params(axis='y', labelcolor='steelblue')
-        ax3_twin.tick_params(axis='y', labelcolor='g')
-        ax3.grid(True, alpha=0.3)
+        ax3.set_xlabel('Date', fontsize=12, fontweight='bold')
+        ax3.set_ylabel('Article Count', color=COLORS['secondary'], fontsize=12, fontweight='bold')
+        ax3_twin.set_ylabel('Trading Volume (M)', color=COLORS['positive'], fontsize=12, fontweight='bold')
+        ax3.set_title(f'{symbol} - News Volume vs Trading Volume', fontsize=14, fontweight='bold', color='#ffffff')
+        ax3.tick_params(axis='y', labelcolor=COLORS['secondary'], labelsize=10)
+        ax3_twin.tick_params(axis='y', labelcolor=COLORS['positive'], labelsize=10)
+        ax3.grid(True, alpha=0.3, linestyle=':', linewidth=0.5)
 
         plt.tight_layout()
 
