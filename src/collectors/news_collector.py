@@ -234,8 +234,10 @@ class NewsCollector:
     def _fetch_query_newsdata(self, query: str, start_date: datetime, end_date: datetime, max_results: int) -> List[Dict]:
         """Fetch by query from NewsData.io"""
         if not self.api_key:
-            logger.error("Cannot fetch news without API key")
+            logger.error("❌ Cannot fetch news without API key. Please enter your NewsData.io API key in the sidebar.")
             return []
+
+        logger.info(f"🔍 Fetching news for '{query}' from {start_date.date()} to {end_date.date()}")
 
         params = {
             'apikey': self.api_key,
@@ -245,24 +247,38 @@ class NewsCollector:
         }
 
         try:
+            logger.info(f"📡 Calling NewsData.io API...")
             response = requests.get(self.base_url, params=params, timeout=30)
             response.raise_for_status()
             data = response.json()
 
+            # Log API response status
+            logger.info(f"API Status: {data.get('status')}")
+
             articles = []
             if data.get('status') == 'success' and 'results' in data:
+                total_results = len(data['results'])
+                logger.info(f"📰 API returned {total_results} results")
+
                 for article in data['results']:
                     pub_date_str = article.get('pubDate')
                     if pub_date_str:
                         try:
                             pub_date = datetime.fromisoformat(pub_date_str.replace('Z', '+00:00'))
+                            # Make timezone-aware for comparison
+                            if start_date.tzinfo is None:
+                                start_date = start_date.replace(tzinfo=pub_date.tzinfo)
+                            if end_date.tzinfo is None:
+                                end_date = end_date.replace(tzinfo=pub_date.tzinfo)
+
                             if not (start_date <= pub_date <= end_date):
                                 continue
-                        except:
+                        except Exception as e:
+                            logger.warning(f"Date parsing error: {e}")
                             pass
 
                     articles.append({
-                        'id': article.get('article_id'),
+                        'id': article.get('article_id', f"{query}_{len(articles)}"),
                         'title': article.get('title'),
                         'text': article.get('content', '') or article.get('description', ''),
                         'summary': article.get('description', ''),
@@ -276,11 +292,24 @@ class NewsCollector:
                         'query': query
                     })
 
-            logger.info(f"Fetched {len(articles)} articles for query: {query}")
-            return articles
+                logger.info(f"✅ Fetched {len(articles)} articles for query '{query}' (after date filtering)")
+                return articles
+            elif data.get('status') == 'error':
+                error_msg = data.get('results', {}).get('message', 'Unknown error')
+                logger.error(f"❌ NewsData.io API error: {error_msg}")
+                return []
+            else:
+                logger.warning(f"⚠️ Unexpected API response: {data}")
+                return []
 
+        except requests.exceptions.HTTPError as e:
+            logger.error(f"❌ HTTP Error {e.response.status_code}: {e.response.text}")
+            return []
         except requests.exceptions.RequestException as e:
-            logger.error(f"Error fetching news for query '{query}': {e}")
+            logger.error(f"❌ Network error fetching news for query '{query}': {e}")
+            return []
+        except Exception as e:
+            logger.error(f"❌ Unexpected error: {e}")
             return []
 
     def _fetch_query_worldnews(self, query: str, start_date: datetime, end_date: datetime, max_results: int) -> List[Dict]:

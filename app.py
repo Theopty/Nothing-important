@@ -93,6 +93,8 @@ if query_input:
 if st.sidebar.button("🚀 Fetch News for Topic", type="primary"):
     if not query_input:
         st.sidebar.error("⚠️ Please enter a topic/query")
+    elif not newsdata_key and news_source == 'newsdata':
+        st.sidebar.error("⚠️ Please enter your NewsData.io API key above first!")
     else:
         # Check if already exists
         query_id = db.save_query(query_input, start_date.isoformat(), end_date.isoformat())
@@ -103,8 +105,12 @@ if st.sidebar.button("🚀 Fetch News for Topic", type="primary"):
         else:
             with st.sidebar:
                 with st.spinner(f"Fetching news about '{query_input}'..."):
-                    # Fetch news
-                    collector = NewsCollector(source=news_source)
+                    # Fetch news - pass API key from UI
+                    api_key = newsdata_key if news_source == 'newsdata' else None
+                    collector = NewsCollector(api_key=api_key, source=news_source)
+
+                    st.info(f"📡 Using {news_source} API...")
+
                     articles = collector.fetch_news_by_query(
                         query_input,
                         datetime.combine(start_date, datetime.min.time()),
@@ -113,6 +119,7 @@ if st.sidebar.button("🚀 Fetch News for Topic", type="primary"):
 
                     if articles:
                         # Analyze
+                        st.info(f"🤖 Analyzing {len(articles)} articles...")
                         sentiment_analyzer = SentimentAnalyzer(method='textblob')
                         entity_analyzer = EntityAnalyzer()
                         algorithm = NewsStockAlgorithm()
@@ -122,13 +129,19 @@ if st.sidebar.button("🚀 Fetch News for Topic", type="primary"):
                         )
 
                         # Save with query_id
+                        st.info(f"💾 Saving to database...")
                         db.save_articles_batch(analyzed, query_id)
                         db.update_query_article_count(query_id, len(analyzed))
 
                         st.success(f"✅ Fetched {len(analyzed)} articles for '{query_input}'!")
                         st.rerun()
                     else:
-                        st.error("❌ No articles found. Check API key or try different dates.")
+                        st.error("❌ No articles found. Check the logs below for details.")
+                        st.caption("Common issues:")
+                        st.caption("• Invalid API key")
+                        st.caption("• No news matching your query in the date range")
+                        st.caption("• API rate limit reached")
+                        st.caption("• Try broader date range or different query")
 
 # Main Content
 st.markdown("---")
