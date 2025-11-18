@@ -210,10 +210,10 @@ class NewsCollector:
         query: str,
         start_date: datetime,
         end_date: datetime,
-        max_results: int = 50
+        max_results: int = 100
     ) -> List[Dict]:
         """
-        Fetch news articles matching a specific query (e.g., company name, topic)
+        Fetch news articles matching a specific query (e.g., "Trump", "Oil", "Earthquake")
 
         Args:
             query: Search query
@@ -224,6 +224,67 @@ class NewsCollector:
         Returns:
             List of articles
         """
+        if self.source == 'newsdata':
+            return self._fetch_query_newsdata(query, start_date, end_date, max_results)
+        elif self.source == 'worldnews':
+            return self._fetch_query_worldnews(query, start_date, end_date, max_results)
+        else:
+            return []
+
+    def _fetch_query_newsdata(self, query: str, start_date: datetime, end_date: datetime, max_results: int) -> List[Dict]:
+        """Fetch by query from NewsData.io"""
+        if not self.api_key:
+            logger.error("Cannot fetch news without API key")
+            return []
+
+        params = {
+            'apikey': self.api_key,
+            'q': query,  # Search query
+            'language': 'en',
+            'size': min(max_results, 50)
+        }
+
+        try:
+            response = requests.get(self.base_url, params=params, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+
+            articles = []
+            if data.get('status') == 'success' and 'results' in data:
+                for article in data['results']:
+                    pub_date_str = article.get('pubDate')
+                    if pub_date_str:
+                        try:
+                            pub_date = datetime.fromisoformat(pub_date_str.replace('Z', '+00:00'))
+                            if not (start_date <= pub_date <= end_date):
+                                continue
+                        except:
+                            pass
+
+                    articles.append({
+                        'id': article.get('article_id'),
+                        'title': article.get('title'),
+                        'text': article.get('content', '') or article.get('description', ''),
+                        'summary': article.get('description', ''),
+                        'url': article.get('link'),
+                        'image': article.get('image_url'),
+                        'publish_date': article.get('pubDate'),
+                        'author': ', '.join(article.get('creator', [])) if article.get('creator') else None,
+                        'source': article.get('source_id', 'unknown'),
+                        'category': ','.join(article.get('category', [])) if article.get('category') else 'general',
+                        'fetched_at': datetime.utcnow().isoformat(),
+                        'query': query
+                    })
+
+            logger.info(f"Fetched {len(articles)} articles for query: {query}")
+            return articles
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error fetching news for query '{query}': {e}")
+            return []
+
+    def _fetch_query_worldnews(self, query: str, start_date: datetime, end_date: datetime, max_results: int) -> List[Dict]:
+        """Fetch by query from WorldNewsAPI"""
         if not self.api_key:
             logger.error("Cannot fetch news without API key")
             return []
@@ -241,10 +302,9 @@ class NewsCollector:
         try:
             response = requests.get(self.base_url, params=params, timeout=30)
             response.raise_for_status()
-
             data = response.json()
-            articles = []
 
+            articles = []
             if 'news' in data:
                 for article in data['news']:
                     articles.append({
@@ -263,7 +323,7 @@ class NewsCollector:
             return articles
 
         except requests.exceptions.RequestException as e:
-            logger.error(f"Error fetching news by query: {e}")
+            logger.error(f"Error fetching news for query '{query}': {e}")
             return []
 
     def _infer_category(self, text: str) -> str:

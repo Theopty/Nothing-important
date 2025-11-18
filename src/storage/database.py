@@ -47,10 +47,24 @@ class NewsStockDatabase:
         """Create database tables if they don't exist"""
         cursor = self.conn.cursor()
 
+        # Queries table - track what we've searched for
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS queries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                query_text TEXT NOT NULL,
+                start_date TEXT NOT NULL,
+                end_date TEXT NOT NULL,
+                article_count INTEGER DEFAULT 0,
+                fetched_at TEXT,
+                UNIQUE(query_text, start_date, end_date)
+            )
+        """)
+
         # News articles table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS articles (
                 id TEXT PRIMARY KEY,
+                query_id INTEGER,
                 title TEXT,
                 text TEXT,
                 summary TEXT,
@@ -69,7 +83,8 @@ class NewsStockDatabase:
                 entity_score REAL,
                 impact_score REAL,
                 total_score REAL,
-                analyzed_at TEXT
+                analyzed_at TEXT,
+                FOREIGN KEY(query_id) REFERENCES queries(id)
             )
         """)
 
@@ -145,7 +160,70 @@ class NewsStockDatabase:
         self.conn.commit()
         logger.info("Database tables created/verified")
 
-    def save_article(self, article: Dict):
+    def save_query(self, query_text: str, start_date: str, end_date: str) -> Optional[int]:
+        """
+        Save a search query, return query_id if new, None if duplicate
+
+        Args:
+            query_text: Search query (e.g., "Trump", "Oil", "Earthquake")
+            start_date: Start date
+            end_date: End date
+
+        Returns:
+            query_id if saved, None if duplicate
+        """
+        try:
+            cursor = self.conn.cursor()
+
+            # Check if exists
+            cursor.execute("""
+                SELECT id FROM queries
+                WHERE query_text = ? AND start_date = ? AND end_date = ?
+            """, (query_text, start_date, end_date))
+
+            existing = cursor.fetchone()
+            if existing:
+                logger.warning(f"Query already exists: {query_text} ({start_date} to {end_date})")
+                return None
+
+            # Insert new query
+            cursor.execute("""
+                INSERT INTO queries (query_text, start_date, end_date, fetched_at)
+                VALUES (?, ?, ?, ?)
+            """, (query_text, start_date, end_date, datetime.now().isoformat()))
+
+            self.conn.commit()
+            query_id = cursor.lastrowid
+            logger.info(f"Saved new query: {query_text} (ID: {query_id})")
+            return query_id
+
+        except Exception as e:
+            logger.error(f"Error saving query: {e}")
+            return None
+
+    def update_query_article_count(self, query_id: int, count: int):
+        """Update article count for a query"""
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                UPDATE queries SET article_count = ? WHERE id = ?
+            """, (count, query_id))
+            self.conn.commit()
+        except Exception as e:
+            logger.error(f"Error updating query count: {e}")
+
+    def get_all_queries(self) -> List[Dict]:
+        """Get all saved queries"""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT id, query_text, start_date, end_date, article_count, fetched_at
+            FROM queries
+            ORDER BY fetched_at DESC
+        """)
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+
+    def save_article(self, article: Dict, query_id: Optional[int] = None):
         """Save an analyzed article to database"""
         try:
             cursor = self.conn.cursor()
@@ -156,13 +234,14 @@ class NewsStockDatabase:
 
             cursor.execute("""
                 INSERT OR REPLACE INTO articles (
-                    id, title, text, summary, url, publish_date, author, source, category,
+                    id, query_id, title, text, summary, url, publish_date, author, source, category,
                     fetched_at, sentiment_polarity, sentiment_type, sentiment_confidence,
                     entities_json, industries_json, sentiment_score, entity_score,
                     impact_score, total_score, analyzed_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 article.get('id'),
+                query_id,
                 article.get('title'),
                 article.get('text'),
                 article.get('summary'),
@@ -189,10 +268,10 @@ class NewsStockDatabase:
         except Exception as e:
             logger.error(f"Error saving article: {e}")
 
-    def save_articles_batch(self, articles: List[Dict]):
+    def save_articles_batch(self, articles: List[Dict], query_id: Optional[int] = None):
         """Save multiple articles"""
         for article in articles:
-            self.save_article(article)
+            self.save_article(article, query_id)
 
     def save_stock_data(self, symbol: str, stock_df: pd.DataFrame):
         """Save stock data to database"""
