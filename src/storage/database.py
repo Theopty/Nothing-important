@@ -89,6 +89,15 @@ class NewsStockDatabase:
             )
         """)
 
+        # Migration: Add query_id column if it doesn't exist (for existing databases)
+        try:
+            cursor.execute("SELECT query_id FROM articles LIMIT 1")
+        except sqlite3.OperationalError:
+            logger.info("Migrating database: Adding query_id column to articles table")
+            cursor.execute("ALTER TABLE articles ADD COLUMN query_id INTEGER")
+            self.conn.commit()
+            logger.info("Migration complete!")
+
         # Stock data table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS stock_data (
