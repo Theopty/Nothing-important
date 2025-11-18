@@ -154,25 +154,309 @@ st.dataframe(
 
 st.markdown("---")
 
-# Analysis Section
-st.subheader("📊 Topic Sentiment vs Stock Price")
+# Analysis Mode Selection
+analysis_mode = st.radio(
+    "Analysis Mode",
+    ["Single Topic Analysis", "Cross-Reference Multiple Topics"],
+    horizontal=True,
+    help="Single: Analyze one topic | Cross-Reference: Compare multiple topics together"
+)
 
-col1, col2, col3 = st.columns([2, 2, 1])
+st.markdown("---")
 
-with col1:
-    selected_query_id = st.selectbox(
-        "Select Topic/Query",
-        options=[q['id'] for q in queries],
-        format_func=lambda x: next(q['query_text'] for q in queries if q['id'] == x)
+if analysis_mode == "Single Topic Analysis":
+    # Original single topic analysis
+    st.subheader("📊 Topic Sentiment vs Stock Price")
+
+    col1, col2, col3 = st.columns([2, 2, 1])
+
+    with col1:
+        selected_query_id = st.selectbox(
+            "Select Topic/Query",
+            options=[q['id'] for q in queries],
+            format_func=lambda x: next(q['query_text'] for q in queries if q['id'] == x)
+        )
+
+    with col2:
+        # Stock symbol input
+        stock_symbol = st.text_input("Stock Symbol", value="AAPL", help="e.g., AAPL, MSFT, TSLA")
+
+    with col3:
+        if st.button("📈 Analyze"):
+            st.rerun()
+else:
+    # Cross-Reference Analysis
+    st.subheader("🔀 Cross-Reference Multiple Topics")
+    st.markdown("Compare how multiple topics interact and find patterns in stock movements")
+
+    col1, col2 = st.columns([3, 1])
+
+    with col1:
+        selected_query_ids = st.multiselect(
+            "Select Topics to Cross-Reference",
+            options=[q['id'] for q in queries],
+            default=[q['id'] for q in queries][:min(2, len(queries))],
+            format_func=lambda x: next(q['query_text'] for q in queries if q['id'] == x),
+            help="Select 2 or more topics to compare (e.g., Trump + Europe)"
+        )
+
+    with col2:
+        stock_symbol = st.text_input("Stock Symbol", value="AAPL", help="e.g., AAPL, MSFT, TSLA")
+
+    if len(selected_query_ids) < 2:
+        st.warning("⚠️ Please select at least 2 topics to cross-reference")
+        st.stop()
+
+    # Fetch data for all selected queries
+    cross_ref_data = {}
+    all_sentiment_data = []
+
+    for query_id in selected_query_ids:
+        cursor = db.conn.cursor()
+        cursor.execute("""
+            SELECT publish_date, sentiment_polarity, sentiment_type, title, source
+            FROM articles
+            WHERE query_id = ?
+            ORDER BY publish_date
+        """, (query_id,))
+
+        query_articles = cursor.fetchall()
+        if not query_articles:
+            continue
+
+        query_info = next(q for q in queries if q['id'] == query_id)
+
+        df_query = pd.DataFrame(query_articles, columns=[
+            'publish_date', 'sentiment_polarity', 'sentiment_type', 'title', 'source'
+        ])
+        df_query['publish_date'] = pd.to_datetime(df_query['publish_date'])
+        df_query['date'] = df_query['publish_date'].dt.date
+
+        daily = df_query.groupby('date').agg({
+            'sentiment_polarity': 'mean',
+            'title': 'count'
+        }).reset_index()
+        daily.columns = ['date', 'avg_sentiment', 'article_count']
+        daily['date'] = pd.to_datetime(daily['date'])
+        daily['query_text'] = query_info['query_text']
+        daily['query_id'] = query_id
+
+        cross_ref_data[query_id] = {
+            'query_text': query_info['query_text'],
+            'daily': daily,
+            'articles': df_query
+        }
+
+        all_sentiment_data.append(daily)
+
+    if len(cross_ref_data) < 2:
+        st.error("Not enough data for selected topics")
+        st.stop()
+
+    # Get stock data
+    stock_collector = StockCollector()
+    all_dates = pd.concat([d['daily']['date'] for d in cross_ref_data.values()])
+    stock_start = all_dates.min()
+    stock_end = all_dates.max()
+
+    stock_df = stock_collector.fetch_stock_data(
+        stock_symbol.upper(),
+        stock_start,
+        stock_end
     )
 
-with col2:
-    # Stock symbol input
-    stock_symbol = st.text_input("Stock Symbol", value="AAPL", help="e.g., AAPL, MSFT, TSLA")
+    if stock_df is None or stock_df.empty:
+        st.error(f"❌ Could not fetch stock data for {stock_symbol.upper()}")
+        st.stop()
 
-with col3:
-    if st.button("📈 Analyze"):
-        st.rerun()
+    stock_df['Daily_Return'] = stock_df['Close'].pct_change() * 100
+    stock_df.index = pd.to_datetime(stock_df.index).tz_localize(None)
+    stock_df['date'] = stock_df.index.date
+    stock_df['date'] = pd.to_datetime(stock_df['date'])
+
+    # Create cross-reference chart
+    st.markdown("### 📊 Multi-Topic Sentiment Cross-Reference")
+
+    fig_cross = make_subplots(
+        rows=2, cols=1,
+        row_heights=[0.6, 0.4],
+        subplot_titles=(
+            'Multiple Topics Sentiment Comparison',
+            f'{stock_symbol.upper()} Stock Price'
+        ),
+        specs=[[{"secondary_y": False}], [{"secondary_y": False}]],
+        vertical_spacing=0.15
+    )
+
+    topic_colors = ['#00bfff', '#00ff88', '#ff6b35', '#9d4edd', '#ffd700', '#39ff14']
+
+    # Add each topic's sentiment
+    for idx, (query_id, data) in enumerate(cross_ref_data.items()):
+        color = topic_colors[idx % len(topic_colors)]
+        fig_cross.add_trace(
+            go.Scatter(
+                x=data['daily']['date'],
+                y=data['daily']['avg_sentiment'],
+                name=data['query_text'],
+                line=dict(color=color, width=3),
+                mode='lines+markers',
+                marker=dict(size=8)
+            ),
+            row=1, col=1
+        )
+
+    # Add stock price
+    fig_cross.add_trace(
+        go.Scatter(
+            x=stock_df['date'],
+            y=stock_df['Close'],
+            name=f'{stock_symbol.upper()} Price',
+            line=dict(color='#ff3366', width=4),
+            mode='lines+markers',
+            marker=dict(size=8),
+            fill='tonexty',
+            fillcolor='rgba(255, 51, 102, 0.1)'
+        ),
+        row=2, col=1
+    )
+
+    fig_cross.update_layout(
+        height=700,
+        plot_bgcolor='#1a1a1a',
+        paper_bgcolor='#0e1117',
+        font=dict(color='#e0e0e0', size=12),
+        hovermode='x unified',
+        showlegend=True,
+        legend=dict(
+            orientation="v",
+            yanchor="top",
+            y=1,
+            xanchor="left",
+            x=1.02,
+            font=dict(size=12)
+        )
+    )
+
+    fig_cross.update_xaxes(showgrid=True, gridcolor='#3d3d3d')
+    fig_cross.update_yaxes(showgrid=True, gridcolor='#3d3d3d')
+    fig_cross.update_yaxes(title_text="Sentiment Score", row=1, col=1, title_font=dict(size=14))
+    fig_cross.update_yaxes(title_text="Stock Price ($)", row=2, col=1, title_font=dict(size=14))
+
+    st.plotly_chart(fig_cross, use_container_width=True)
+
+    # Pattern Analysis
+    st.markdown("### 🔍 Sentiment Pattern Analysis")
+
+    # Merge all sentiments together
+    merged_sentiments = stock_df[['date', 'Close', 'Daily_Return']].copy()
+
+    for query_id, data in cross_ref_data.items():
+        daily_data = data['daily'][['date', 'avg_sentiment']].copy()
+        daily_data = daily_data.rename(columns={'avg_sentiment': f"sentiment_{data['query_text']}"})
+        merged_sentiments = pd.merge(merged_sentiments, daily_data, on='date', how='outer')
+
+    merged_sentiments = merged_sentiments.sort_values('date')
+    merged_sentiments = merged_sentiments.dropna()
+
+    if len(merged_sentiments) < 3:
+        st.warning("Not enough overlapping data for pattern analysis")
+    else:
+        # Identify sentiment patterns
+        sentiment_cols = [col for col in merged_sentiments.columns if col.startswith('sentiment_')]
+
+        # Create pattern categories
+        def categorize_pattern(row):
+            sentiments = [row[col] for col in sentiment_cols]
+            positive_count = sum(1 for s in sentiments if s > 0.1)
+            negative_count = sum(1 for s in sentiments if s < -0.1)
+
+            if positive_count == len(sentiments):
+                return "All Positive"
+            elif negative_count == len(sentiments):
+                return "All Negative"
+            elif positive_count > negative_count:
+                return "Mostly Positive"
+            elif negative_count > positive_count:
+                return "Mostly Negative"
+            else:
+                return "Mixed/Neutral"
+
+        merged_sentiments['pattern'] = merged_sentiments.apply(categorize_pattern, axis=1)
+
+        # Calculate average stock movement for each pattern
+        pattern_analysis = merged_sentiments.groupby('pattern').agg({
+            'Daily_Return': ['mean', 'std', 'count'],
+            'Close': 'mean'
+        }).round(3)
+
+        pattern_analysis.columns = ['Avg Daily Return (%)', 'Std Dev', 'Days', 'Avg Stock Price']
+        pattern_analysis = pattern_analysis.sort_values('Avg Daily Return (%)', ascending=False)
+
+        st.markdown("#### 📈 Stock Performance by Sentiment Pattern")
+
+        # Display metrics
+        pattern_cols = st.columns(len(pattern_analysis))
+        for idx, (pattern, row) in enumerate(pattern_analysis.iterrows()):
+            with pattern_cols[idx]:
+                emoji = "🟢" if row['Avg Daily Return (%)'] > 0 else "🔴" if row['Avg Daily Return (%)'] < 0 else "⚪"
+                st.metric(
+                    f"{emoji} {pattern}",
+                    f"{row['Avg Daily Return (%)']:+.2f}%",
+                    delta=f"{int(row['Days'])} days"
+                )
+
+        st.dataframe(
+            pattern_analysis,
+            use_container_width=True,
+            height=200
+        )
+
+        # Detailed breakdown
+        st.markdown("#### 📋 Pattern Breakdown by Date")
+
+        pattern_display = merged_sentiments[['date', 'pattern', 'Daily_Return', 'Close'] + sentiment_cols].copy()
+        pattern_display = pattern_display.sort_values('date', ascending=False)
+
+        # Color code patterns
+        def highlight_pattern(row):
+            if row['pattern'] == 'All Positive':
+                return ['background-color: #1a3d1a'] * len(row)
+            elif row['pattern'] == 'All Negative':
+                return ['background-color: #3d1a1a'] * len(row)
+            elif row['pattern'] == 'Mostly Positive':
+                return ['background-color: #1a2d1a'] * len(row)
+            elif row['pattern'] == 'Mostly Negative':
+                return ['background-color: #2d1a1a'] * len(row)
+            else:
+                return ['background-color: #1a1a1a'] * len(row)
+
+        st.dataframe(
+            pattern_display.head(50),
+            use_container_width=True,
+            height=300
+        )
+
+        # Insights
+        best_pattern = pattern_analysis.iloc[0]
+        worst_pattern = pattern_analysis.iloc[-1]
+
+        st.markdown("### 💡 Cross-Reference Insights")
+        st.info(f"""
+**Best Pattern:** {best_pattern.name}
+- Average daily return: **{best_pattern['Avg Daily Return (%)']:+.2f}%**
+- Occurred on {int(best_pattern['Days'])} days
+
+**Worst Pattern:** {worst_pattern.name}
+- Average daily return: **{worst_pattern['Avg Daily Return (%)']:+.2f}%**
+- Occurred on {int(worst_pattern['Days'])} days
+
+**Topics Analyzed:** {', '.join([data['query_text'] for data in cross_ref_data.values()])}
+        """)
+
+    st.stop()
+
+# Continue with single topic analysis
+selected_query_id = selected_query_id
 
 selected_query = next(q for q in queries if q['id'] == selected_query_id)
 
