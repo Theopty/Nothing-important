@@ -74,6 +74,22 @@ with col2:
 
 news_source = st.sidebar.selectbox("News Source", ["newsdata", "worldnews"])
 
+# Show existing queries for this topic
+if query_input:
+    cursor = db.conn.cursor()
+    cursor.execute("""
+        SELECT start_date, end_date, article_count, fetched_at
+        FROM queries
+        WHERE query_text = ?
+        ORDER BY fetched_at DESC
+    """, (query_input,))
+    existing_queries = cursor.fetchall()
+
+    if existing_queries:
+        st.sidebar.info(f"📋 Found {len(existing_queries)} existing searches for '{query_input}':")
+        for eq in existing_queries[:3]:  # Show last 3
+            st.sidebar.caption(f"  • {eq['start_date']} to {eq['end_date']} ({eq['article_count']} articles)")
+
 if st.sidebar.button("🚀 Fetch News for Topic", type="primary"):
     if not query_input:
         st.sidebar.error("⚠️ Please enter a topic/query")
@@ -82,7 +98,8 @@ if st.sidebar.button("🚀 Fetch News for Topic", type="primary"):
         query_id = db.save_query(query_input, start_date.isoformat(), end_date.isoformat())
 
         if query_id is None:
-            st.sidebar.warning(f"⚠️ **Duplicate!** Query '{query_input}' for {start_date} to {end_date} already exists in database.")
+            st.sidebar.warning(f"⚠️ Already fetched! This exact query exists. Try different dates or analyze the existing data below.")
+            # Don't block - they can still use the existing data
         else:
             with st.sidebar:
                 with st.spinner(f"Fetching news about '{query_input}'..."):
@@ -134,7 +151,27 @@ if not queries:
     st.stop()
 
 # Query History
-st.subheader("📚 Your Saved Queries")
+col_title, col_manage = st.columns([3, 1])
+with col_title:
+    st.subheader("📚 Your Saved Queries")
+with col_manage:
+    with st.expander("🗑️ Manage"):
+        st.caption("Delete queries you no longer need")
+        delete_query = st.selectbox(
+            "Select query to delete:",
+            options=[q['id'] for q in queries],
+            format_func=lambda x: next(f"{q['query_text']} ({q['start_date']} to {q['end_date']})" for q in queries if q['id'] == x),
+            key="delete_select"
+        )
+        if st.button("Delete Selected", type="secondary", key="delete_btn"):
+            cursor = db.conn.cursor()
+            # Delete articles first
+            cursor.execute("DELETE FROM articles WHERE query_id = ?", (delete_query,))
+            # Delete query
+            cursor.execute("DELETE FROM queries WHERE id = ?", (delete_query,))
+            db.conn.commit()
+            st.success("✅ Deleted!")
+            st.rerun()
 
 queries_df = pd.DataFrame(queries)
 queries_df['fetched_at'] = pd.to_datetime(queries_df['fetched_at']).dt.strftime('%Y-%m-%d %H:%M')

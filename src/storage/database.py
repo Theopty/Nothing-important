@@ -37,7 +37,8 @@ class NewsStockDatabase:
     def _connect(self):
         """Establish database connection"""
         try:
-            self.conn = sqlite3.connect(self.db_path)
+            # check_same_thread=False allows Streamlit to use connection across threads
+            self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
             self.conn.row_factory = sqlite3.Row  # Enable dict-like access
             logger.info(f"Connected to database: {self.db_path}")
         except Exception as e:
