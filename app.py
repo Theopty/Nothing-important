@@ -355,6 +355,190 @@ st.info(f"""
 - Based on {len(df_articles)} articles from {selected_query['start_date']} to {selected_query['end_date']}
 """)
 
+# Source Impact Analysis
+st.markdown("---")
+st.subheader("📡 Source Impact Analysis")
+st.markdown(f"Compare how different news sources cover **'{selected_query['query_text']}'** and their impact on **{stock_symbol.upper()}**")
+
+# Get unique sources
+available_sources = df_articles['source'].value_counts()
+source_options = list(available_sources.index)
+
+if len(source_options) > 1:
+    # Source selector
+    col_src1, col_src2 = st.columns([3, 1])
+
+    with col_src1:
+        selected_sources = st.multiselect(
+            "Select Sources to Compare",
+            options=source_options,
+            default=source_options[:min(5, len(source_options))],  # Default to first 5
+            help="Toggle sources to compare their sentiment and impact"
+        )
+
+    with col_src2:
+        if st.button("Select All Sources"):
+            selected_sources = source_options
+            st.rerun()
+
+    if selected_sources:
+        # Calculate per-source daily sentiment
+        source_sentiment_data = []
+        source_colors = ['#00bfff', '#00ff88', '#ff6b35', '#9d4edd', '#ffd700', '#ff3366', '#39ff14', '#ff00ff']
+
+        # Create interactive chart comparing sources
+        fig_sources = make_subplots(
+            rows=2, cols=1,
+            row_heights=[0.6, 0.4],
+            subplot_titles=(
+                f'Sentiment by Source: "{selected_query["query_text"]}"',
+                f'{stock_symbol.upper()} Stock Price'
+            ),
+            specs=[[{"secondary_y": False}], [{"secondary_y": False}]],
+            vertical_spacing=0.15
+        )
+
+        # Add line for each source
+        for idx, source in enumerate(selected_sources):
+            source_df = df_articles[df_articles['source'] == source].copy()
+            source_daily = source_df.groupby('date').agg({
+                'sentiment_polarity': 'mean',
+                'title': 'count'
+            }).reset_index()
+            source_daily.columns = ['date', 'avg_sentiment', 'article_count']
+            source_daily['date'] = pd.to_datetime(source_daily['date'])
+
+            # Calculate correlation with stock returns
+            source_merged = pd.merge(source_daily, stock_df, on='date', how='inner')
+            if len(source_merged) > 2:
+                source_corr = source_merged['avg_sentiment'].corr(source_merged['Daily_Return'])
+            else:
+                source_corr = 0.0
+
+            source_sentiment_data.append({
+                'source': source,
+                'articles': len(source_df),
+                'avg_sentiment': source_df['sentiment_polarity'].mean(),
+                'correlation': source_corr,
+                'days_covered': len(source_daily)
+            })
+
+            # Add to chart
+            color = source_colors[idx % len(source_colors)]
+            fig_sources.add_trace(
+                go.Scatter(
+                    x=source_daily['date'],
+                    y=source_daily['avg_sentiment'],
+                    name=f'{source} (r={source_corr:+.2f})',
+                    line=dict(color=color, width=3),
+                    mode='lines+markers',
+                    marker=dict(size=6),
+                    hovertemplate=f'<b>{source}</b><br>Date: %{{x}}<br>Sentiment: %{{y:.3f}}<extra></extra>'
+                ),
+                row=1, col=1
+            )
+
+        # Add stock price to bottom chart
+        fig_sources.add_trace(
+            go.Scatter(
+                x=merged['date'],
+                y=merged['Close'],
+                name=f'{stock_symbol.upper()} Price',
+                line=dict(color='#ff3366', width=4),
+                mode='lines+markers',
+                marker=dict(size=8),
+                fill='tonexty',
+                fillcolor='rgba(255, 51, 102, 0.1)'
+            ),
+            row=2, col=1
+        )
+
+        # Layout
+        fig_sources.update_layout(
+            height=700,
+            plot_bgcolor='#1a1a1a',
+            paper_bgcolor='#0e1117',
+            font=dict(color='#e0e0e0', size=12),
+            hovermode='x unified',
+            showlegend=True,
+            legend=dict(
+                orientation="v",
+                yanchor="top",
+                y=1,
+                xanchor="left",
+                x=1.02,
+                font=dict(size=11)
+            )
+        )
+
+        fig_sources.update_xaxes(showgrid=True, gridcolor='#3d3d3d')
+        fig_sources.update_yaxes(showgrid=True, gridcolor='#3d3d3d')
+        fig_sources.update_yaxes(title_text="Sentiment Score", row=1, col=1, title_font=dict(size=14))
+        fig_sources.update_yaxes(title_text="Stock Price ($)", row=2, col=1, title_font=dict(size=14))
+
+        st.plotly_chart(fig_sources, use_container_width=True)
+
+        # Source comparison table
+        st.markdown("#### 📊 Source Impact Comparison")
+        source_comparison_df = pd.DataFrame(source_sentiment_data)
+        source_comparison_df = source_comparison_df.sort_values('correlation', ascending=False, key=abs)
+
+        # Display metrics
+        cols = st.columns(len(selected_sources))
+        for idx, row in source_comparison_df.iterrows():
+            with cols[source_comparison_df.index.get_loc(idx)]:
+                corr_emoji = "🔥" if abs(row['correlation']) > 0.5 else "📊" if abs(row['correlation']) > 0.3 else "📉"
+                st.metric(
+                    f"{corr_emoji} {row['source']}",
+                    f"{row['correlation']:+.3f}",
+                    delta=f"{row['articles']} articles"
+                )
+
+        # Detailed table
+        st.dataframe(
+            source_comparison_df,
+            column_config={
+                "source": "Source",
+                "articles": "Articles",
+                "avg_sentiment": st.column_config.NumberColumn("Avg Sentiment", format="%.3f"),
+                "correlation": st.column_config.NumberColumn("Correlation", format="%.3f"),
+                "days_covered": "Days"
+            },
+            use_container_width=True,
+            height=200
+        )
+
+        # Impact interpretation
+        st.markdown("#### 💡 Source Impact Insights")
+        top_source = source_comparison_df.iloc[0]
+        impact_emoji = "🔥" if abs(top_source['correlation']) > 0.5 else "📊"
+
+        st.info(f"""
+{impact_emoji} **Most Impactful Source: {top_source['source']}**
+
+- **Correlation:** {top_source['correlation']:+.3f} with {stock_symbol.upper()} returns
+- **Coverage:** {top_source['articles']} articles over {top_source['days_covered']} days
+- **Avg Sentiment:** {top_source['avg_sentiment']:+.3f}
+
+This source's sentiment about **"{selected_query['query_text']}"** shows the {'strongest' if abs(top_source['correlation']) > 0.3 else 'some'} correlation with stock movements.
+        """)
+
+        # Filter articles by source
+        st.markdown("#### 🔍 Filter Articles by Source")
+        source_filter = st.selectbox(
+            "View articles from:",
+            options=["All Sources"] + selected_sources,
+            key="source_filter_select"
+        )
+
+        if source_filter != "All Sources":
+            df_articles = df_articles[df_articles['source'] == source_filter]
+            st.caption(f"Showing {len(df_articles)} articles from **{source_filter}**")
+    else:
+        st.warning("👆 Select at least one source to compare")
+else:
+    st.info("Only one source found in this dataset. Fetch more news to compare sources.")
+
 # News Articles Table
 st.markdown("---")
 st.subheader(f"📰 Articles about '{selected_query['query_text']}'")
